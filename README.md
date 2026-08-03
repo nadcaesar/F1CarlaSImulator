@@ -1,453 +1,277 @@
-# 🏎️ F1 CARLA Simulator
+# F1 Vehicle Dynamics Simulator
 
-A Formula One vehicle simulation project built in C++ using the CARLA open-source autonomous driving simulator. This project models F1 car physics including tire dynamics, aerodynamics, and race telemetry — designed as a portfolio project demonstrating systems programming, real-time simulation, and applied machine learning.
+A standalone C++ simulation of a Formula One car's dynamics — a full nonlinear
+bicycle model with tire grip limits, aerodynamic downforce, load transfer, and
+a pure-pursuit path-following controller that can drive the car around a
+closed-loop test circuit. Telemetry is logged to CSV and plotted with a small
+Python/matplotlib utility.
 
-**Author:** Nicholas Caesar  
-**Degree:** B.S. Computer Science, Howard University (December 2026)  
-**Stack:** C++, Python, CARLA 0.9.16, Ubuntu 22.04, ROS
+**Author:** Nicholas Caesar
+**Stack:** C++17, CMake, Python 3 (pandas, matplotlib)
 
----
-
-## 📋 Table of Contents
-
-- [Project Overview](#project-overview)
-- [Project Goals](#project-goals)
-- [Architecture](#architecture)
-- [Environment Setup](#environment-setup)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Results](#results)
-- [Development Journal](#development-journal)
-- [Roadmap](#roadmap)
-- [Lessons Learned](#lessons-learned)
+> This project originally set out to build on top of the CARLA simulator. It
+> has since pivoted to a self-contained physics simulation with no external
+> simulator dependency — everything below describes what actually exists in
+> the code today.
 
 ---
 
-## Project Overview
+## Table of Contents
 
-This simulator models a Formula One car operating on a race circuit, capturing real-time telemetry data including:
-
-- Tire wear and degradation models
-- Aerodynamic downforce and drag calculations
-- Lap time analysis and sector breakdowns
-- Fuel consumption modeling
-- Pit strategy simulation
-
-The project is built on top of CARLA — the same open-source simulator used by autonomous vehicle companies like Waymo and Aurora — with custom C++ clients that interface with CARLA's API to control vehicle behavior and extract simulation data.
+- [What's implemented](#whats-implemented)
+- [Building and running](#building-and-running)
+- [The physics model](#the-physics-model)
+- [Scenarios and what their results mean](#scenarios-and-what-their-results-mean)
+- [Plotting telemetry](#plotting-telemetry)
+- [Project layout](#project-layout)
+- [Known gaps / not yet implemented](#known-gaps--not-yet-implemented)
 
 ---
 
-## Project Goals
+## What's implemented
 
-### Short Term (Summer 2026)
+- A **dynamic bicycle model** (`src/vehicle/`) with a linear tire model,
+  aerodynamic downforce, longitudinal load transfer under acceleration/braking,
+  and a **friction-circle grip limit** so cornering force is physically bounded
+  instead of unlimited.
+- A **path-following controller** (`src/track/`) — a synthetic closed-loop test
+  track plus a pure-pursuit steering controller that drives the car around it
+  autonomously.
+- **Three demo scenarios** in `main.cpp` that exercise both of the above (see
+  below).
+- CSV telemetry output and a **Python plotting script** (`src/utils/plot_run.py`)
+  that renders trajectory, speed, yaw rate, and lateral-g from any run.
 
-- [ ] Get CARLA running with a basic vehicle model
-- [ ] Write C++ client that connects to CARLA and controls a vehicle
-- [ ] Log basic telemetry (speed, position, tire data) to CSV
-- [ ] Implement basic F1 tire degradation model
-- [ ] Push clean, documented results to GitHub
-
-### Medium Term (Autumn 2026)
-
-- [ ] Implement aerodynamics model (downforce, drag, DRS)
-- [ ] Build lap time analyzer
-- [ ] Add pit strategy logic layer
-- [ ] Create visualization of telemetry data
-- [ ] Polish GitHub repo for portfolio use
-
-### Long Term
-
-- [ ] Integrate machine learning for optimal race strategy
-- [ ] Compare simulated telemetry against real F1 data
-- [ ] Build web dashboard for visualizing simulation results
-
----
-
-## Architecture
-
-markdown
-
-```
-f1-carla-simulator/
-├── src/
-│   ├── main.cpp                  # Entry point, CARLA client init
-│   ├── vehicle/
-│   │   ├── vehicle.h             # Vehicle class definition
-│   │   └── vehicle.cpp           # Vehicle physics implementation
-│   ├── track/
-│   │   ├── track.h               # Track class definition
-│   │   └── track.cpp             # Track geometry and sector logic
-│   ├── telemetry/
-│   │   ├── telemetry.h           # Telemetry logger definition
-│   │   └── telemetry.cpp         # Data capture and CSV export
-│   └── utils/                    # Shared utility functions
-├── results/
-│   ├── telemetry/                # CSV telemetry output files
-│   ├── logs/                     # Simulation run logs
-│   └── replays/                  # Saved simulation replays
-├── docs/
-│   ├── research/                 # Research notes and references
-│   └── diagrams/                 # Architecture diagrams
-├── tests/                        # Unit tests
-├── config/
-│   └── simulation_config.json    # Simulation parameters
-└── README.md
-```
-
----
-
-## Environment Setup
-
-### Host Machine Specs
-
-| Component   | Spec                                  |
-| ----------- | ------------------------------------- |
-| **CPU**     | Intel Core i7-13700F (13th Gen)       |
-| **RAM**     | 32GB                                  |
-| **Storage** | 2TB                                   |
-| **GPU**     | Dedicated (NVIDIA)                    |
-| **OS**      | Windows 11 / Ubuntu 22.04 (Dual Boot) |
-
-### Virtual Machine Specs (Development Phase)
-
-| Setting        | Value                      |
-| -------------- | -------------------------- |
-| **Hypervisor** | Oracle VirtualBox 7.0+     |
-| **OS**         | Ubuntu 22.04 LTS           |
-| **RAM**        | 16GB allocated             |
-| **CPU Cores**  | 4-6 cores                  |
-| **Storage**    | 150GB virtual disk         |
-| **Graphics**   | VMSVGA, 128MB video memory |
-
-### Software Stack
-
-- **CARLA** 0.9.16 — Autonomous driving simulator
-- **Unreal Engine** 4.26 — CARLA's rendering backend
-- **VS Code** — Primary IDE
-- **GCC/G++** — C++ compiler
-- **CMake** — Build system
-- **Python 3.10** — Scripting and data analysis
-- **Git** — Version control
-
----
-
-## Installation
-
-### Prerequisites
+## Building and running
 
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install build tools
-sudo apt install -y git build-essential cmake python3-pip
-
-# Install VS Code
-sudo snap install code --classic
-
-# Install CARLA Python client
-pip3 install carla==0.9.16
+cmake -S . -B build
+cmake --build build
+./build/f1sim
 ```
 
-### Clone Repository
+Run it from the repo root — it writes CSVs to `results/telemetry/` using a
+relative path. Each run overwrites the three sample CSVs and prints a summary
+line per scenario, e.g.:
+
+```
+Grip-limit demo (15 deg): final speed 3.6 km/h, wrote results/telemetry/run_grip_limit.csv
+Normal corner (3 deg): final speed 317.147 km/h, wrote results/telemetry/run_normal.csv
+Circuit lap (pure pursuit): completed lap 1 at t=19.917s
+Circuit lap (pure pursuit): final speed 88.7437 km/h, 1 lap(s) completed, wrote results/telemetry/run_circuit.csv
+```
+
+## The physics model
+
+### `CarParams` (src/vehicle/vehicle.h)
+
+| Variable | Meaning | Value |
+| --- | --- | --- |
+| `mass` | Vehicle mass | 798.0 kg (FIA minimum) |
+| `Iz` | Yaw moment of inertia | 1000.0 kg·m² |
+| `a` | CG to front axle distance | 1.60 m |
+| `b` | CG to rear axle distance | 2.00 m |
+| `cgHeight` | CG height above ground | 0.30 m |
+| `trackWidth` | Distance between left/right wheels | 1.60 m *(declared, not yet used — see [Known gaps](#known-gaps--not-yet-implemented))* |
+| `Cf` / `Cr` | Front/rear tire cornering stiffness | 180,000 / 220,000 N/rad |
+| `maxDriveF` | Max drive force | 12,000 N |
+| `maxBrakeF` | Max brake force | 45,000 N |
+| `dragCoeff` | Lumped drag term (½·ρ·Cd·A) | 1.10 |
+| `liftCoeff` | Downforce coefficient (N per (m/s)²) | 3.20 |
+| `muTire` | Peak tire friction coefficient | 1.60 |
+
+### `State` (src/vehicle/vehicle.h)
+
+`x`, `y` (m, world frame position) · `yaw` (rad, heading) · `vx`, `vy` (m/s,
+body-frame longitudinal/lateral velocity) · `r` (rad/s, yaw rate).
+
+### Per-step physics (`step()` in src/vehicle/vehicle.cpp)
+
+**1. Slip angles** — the angle between where each axle's tires point and the
+direction they're actually travelling:
+
+```
+alphaF = atan2(vy + a*r, vx) - steer
+alphaR = atan2(vy - b*r, vx)
+```
+
+**2. Raw linear tire forces** — lateral force opposing slip angle, uncapped:
+
+```
+FyfRaw = -Cf * alphaF
+FyrRaw = -Cr * alphaR
+```
+
+**3. Longitudinal force:**
+
+```
+drag = dragCoeff * vx^2
+Fx   = throttle*maxDriveF - brake*maxBrakeF - drag
+```
+
+**4. Axle normal loads** (`axleLoads()`) — static weight distribution by CG
+position, plus aero downforce (split 50/50 front/rear), plus longitudinal load
+transfer under acceleration/braking:
+
+```
+staticFront = mass*g * b/(a+b)
+staticRear  = mass*g * a/(a+b)
+downforce   = liftCoeff * vx^2      (split 50/50 front/rear)
+transfer    = mass * ax * cgHeight / (a+b)   (ax estimated as Fx/mass)
+
+Fzf = staticFront + downforce/2 - transfer   (clamped >= 0)
+Fzr = staticRear  + downforce/2 + transfer   (clamped >= 0)
+```
+
+Braking (`ax < 0`) loads the front axle; accelerating (`ax > 0`) loads the
+rear — standard weight-transfer behavior.
+
+**5. Friction-circle grip limit** — each axle has one shared grip budget for
+combined lateral + longitudinal force, not two independent limits:
+
+```
+FyMax = sqrt(max(0, (muTire*Fz)^2 - FxDemand^2))
+Fyf   = clamp(FyfRaw, -FyfMax, FyfMax)
+Fyr   = clamp(FyrRaw, -FyrMax, FyrMax)
+```
+
+This is what caps the raw linear tire model at a physically plausible limit —
+without it, the car could generate unlimited cornering force at any speed.
+
+**6. Equations of motion** (standard dynamic bicycle model):
+
+```
+ax   = (Fx - Fyf*sin(steer)) / mass + vy*r
+ay   = (Fyf*cos(steer) + Fyr) / mass - vx*r
+rDot = (a*Fyf*cos(steer) - b*Fyr) / Iz
+```
+
+**7. Integration** — explicit Euler at `dt = 0.001s` (1ms):
+
+```
+vx += ax*dt;  vy += ay*dt;  r += rDot*dt;  yaw += r*dt
+x  += (vx*cos(yaw) - vy*sin(yaw)) * dt
+y  += (vx*sin(yaw) + vy*cos(yaw)) * dt
+```
+
+`vx` is floored at 1.0 m/s to avoid a divide-by-zero in the slip angle
+calculation.
+
+### Path following (`src/track/track.cpp`)
+
+- **`Track::stadium()`** builds a closed-loop test circuit: two straights
+  joined by two semicircles (120m straights, 40m-radius turns, ~491m lap
+  length), sampled into waypoints roughly 1m apart.
+- **`Track::lookaheadPoint()`** finds the nearest waypoint ahead of the car
+  (searching a local window so it can't jump to the wrong side of the loop)
+  and returns the point a fixed distance further along the track.
+- **`purePursuitSteer()`** computes the front-wheel angle that arcs the car
+  toward that lookahead point:
+
+```
+localX, localY = targetPoint transformed into the car's local frame
+steer = atan2(2 * wheelbase * localY, localX^2 + localY^2)
+```
+
+- The circuit scenario also runs a simple proportional controller on
+  throttle/brake to hold a constant target speed.
+
+### Telemetry output
+
+Every scenario logs the same CSV schema at 100 Hz (`time, x, y, yaw, vx, vy,
+yaw_rate, lat_accel_g`). `lat_accel_g` is computed as `(vx * r) / 9.81` — a
+quasi-steady-state approximation of lateral g that omits the `vy_dot` term, so
+it's most accurate once the car has settled into a corner rather than during
+the initial transient.
+
+## Scenarios and what their results mean
+
+`main.cpp` runs three scenarios per build, each demonstrating something
+different about the model:
+
+### 1. Grip-limit demo — `run_grip_limit.csv` / `run_grip_limit_plot.png`
+
+Steer snaps to **15°** at `t=3s` while doing ~234 km/h. That's a huge,
+instantaneous input for that speed — real F1 cars use only a couple degrees of
+front wheel angle at high speed. The friction circle correctly saturates the
+tires immediately: the car can't generate anywhere near the commanded turn
+rate, slip angles spiral, and it spins (`vx` collapses to its 1.0 m/s floor,
+`vy` and yaw rate run away). **This is the friction-circle limiter working as
+intended**, not a bug — it's proof the model now enforces a real grip budget
+instead of allowing unlimited cornering force.
+
+Known limitation: the spin doesn't self-arrest — yaw rate grows roughly
+linearly instead of settling into a stable flat spin, because the clamp always
+supplies the maximum available grip opposing slip, rather than modeling how
+real tires lose most of their force once well past peak slip angle.
+
+### 2. Normal corner — `run_normal.csv` / `run_normal_plot.png`
+
+Steer holds at **3°** — the same input used before grip limiting existed.
+Numerically it produces the same result as that very first run (~4g at
+317 km/h), but now that number is *validated* rather than an artifact: at
+~88 m/s the model's downforce term adds enough grip that 4g is physically
+supportable, which is also why real F1 cars can pull that much lateral g in
+fast corners — aero downforce, not just mechanical tire grip.
+
+### 3. Circuit lap — `run_circuit.csv` / `run_circuit_plot.png`
+
+The car drives the synthetic stadium track autonomously via pure pursuit,
+holding ~25 m/s (90 km/h) — modest on purpose, so the 40m-radius turns stay
+comfortably within the tires' grip. It completes a lap in about 20 seconds,
+with lateral g cycling cleanly between ~0 on the straights and ~1.5g in the
+turns. This is the first scenario where the vehicle model and a path-following
+controller work together, rather than following a hand-scripted steer input.
+
+## Plotting telemetry
 
 ```bash
-cd ~/Documents
-git clone https://github.com/YOUR-USERNAME/f1-carla-simulator.git
-cd f1-carla-simulator
+python3 -m venv venv
+source venv/bin/activate
+pip install pandas matplotlib
+
+python src/utils/plot_run.py --csv results/telemetry/run_circuit.csv \
+                              --out results/logs/run_circuit_plot.png
 ```
 
-### Install CARLA
+`--csv` and `--out` both default to the original single-run paths if omitted;
+pass them explicitly to plot one of the three named scenarios.
 
-```bash
-# Download CARLA 0.9.16
-cd ~/Downloads
-wget -L https://github.com/carla-simulator/carla/releases/download/0.9.16/CARLA_0.9.16.tar.gz
+## Project layout
 
-# Extract
-mkdir -p ~/Documents/CARLA
-tar -xvf CARLA_0.9.16.tar.gz -C ~/Documents/CARLA
+```
+src/
+├── main.cpp              # Entry point — defines and runs the three scenarios
+├── vehicle/
+│   ├── vehicle.h/.cpp     # CarParams, State, axleLoads(), step() — the physics
+├── track/
+│   ├── track.h/.cpp       # Track waypoints/lookahead, pure-pursuit steering
+├── telemetry/             # Not yet implemented (see below)
+└── utils/
+    └── plot_run.py        # Matplotlib telemetry plotting
 
-# Make executable
-cd ~/Documents/CARLA
-chmod +x CarlaUE4.sh
+results/
+├── telemetry/             # CSV output per scenario
+└── logs/                  # Plotted PNGs per scenario
+
+tests/                     # Not yet implemented (see below)
+config/                    # Not yet implemented (see below)
 ```
 
-### Launch CARLA
-
-```bash
-# Standard launch
-./CarlaUE4.sh
-
-# Inside VirtualBox VM (OpenGL mode)
-./CarlaUE4.sh -opengl
-
-# Headless mode (no rendering, data only)
-./CarlaUE4.sh -RenderOffScreen -nosound
-```
-
-### Build Project
-
-```bash
-cd ~/Documents/f1-carla-simulator
-mkdir build && cd build
-cmake ..
-make
-```
-
----
-
-## Usage
-
-```bash
-# Start CARLA server first
-cd ~/Documents/CARLA
-./CarlaUE4.sh
-
-# Then in a new terminal, run the simulator
-cd ~/Documents/f1-carla-simulator/build
-./f1_simulator --track monza --laps 10 --output ../results/telemetry/
-```
-
----
-
-## Results
-
-Simulation telemetry outputs are stored in `results/telemetry/` as CSV files with the following columns:
-
-| Column           | Description                |
-| ---------------- | -------------------------- |
-| `timestamp`      | Simulation time in seconds |
-| `speed_kmh`      | Vehicle speed in km/h      |
-| `throttle`       | Throttle input (0.0 - 1.0) |
-| `brake`          | Brake input (0.0 - 1.0)    |
-| `steering`       | Steering angle             |
-| `tire_fl_wear`   | Front left tire wear %     |
-| `tire_fr_wear`   | Front right tire wear %    |
-| `tire_rl_wear`   | Rear left tire wear %      |
-| `tire_rr_wear`   | Rear right tire wear %     |
-| `fuel_remaining` | Fuel remaining in kg       |
-| `lap_number`     | Current lap                |
-| `sector`         | Current track sector (1-3) |
-
----
-
-## Development Journal
-
-This section documents the real setup process including every obstacle encountered and how it was resolved. This is kept intentionally honest because debugging is real engineering work.
-
----
-
-### Phase 1 — Initial Environment Setup
-
-**Goal:** Get Ubuntu VM running with CARLA installed.
-
-**Environment:**
-
-- Host: Windows 11, i7-13700F, 32GB RAM
-- Hypervisor: VirtualBox 7.0
-- Target: Ubuntu 22.04 + CARLA 0.9.16
-
----
-
-#### Issue 1: Ubuntu Version Incompatibility
-
-**Problem:** Initially installed Ubuntu 24.04. CARLA 0.9.15/0.9.16 was built against Ubuntu 22.04 libraries. Running CARLA on 24.04 produced an `Illegal instruction (core dumped)` error immediately on launch.
-
-**Root Cause:** Ubuntu 24.04 ships with updated versions of core system libraries (libc, OpenGL/Vulkan) that CARLA was not compiled against.
-
-**Resolution:** Deleted VM, downloaded Ubuntu 22.04.3 LTS ISO specifically, rebuilt VM from scratch.
-
-**Lesson:** Always check the simulator's officially supported OS version before installing. CARLA's documentation explicitly states Ubuntu 22.04.
-
----
-
-#### Issue 2: Bidirectional Clipboard Not Working
-
-**Problem:** Copy/paste between Windows host and Ubuntu VM didn't work despite setting Shared Clipboard to Bidirectional in VirtualBox settings.
-
-**Root Cause:** VirtualBox Guest Additions were not properly installed inside the VM. The `virtualbox-guest-dkms` package name changed in Ubuntu 22.04 repositories.
-
-**Resolution:**
-
-```bash
-# Remove old broken packages
-sudo apt purge virtualbox-guest-dkms virtualbox-guest-x11 virtualbox-guest-utils -y
-sudo apt autoremove -y
-
-# Install dependencies
-sudo apt update
-sudo apt install -y build-essential dkms linux-headers-$(uname -r)
-sudo apt install -y virtualbox-guest-utils virtualbox-guest-x11
-
-# Install from VirtualBox CD
-sudo mkdir -p /mnt/cdrom
-sudo mount /dev/cdrom /mnt/cdrom
-cd /mnt/cdrom
-sudo ./VBoxLinuxAdditions.run
-sudo reboot
-```
-
-**Lesson:** Always install Guest Additions from the official VirtualBox CD image rather than relying solely on apt packages, as package names change between Ubuntu versions.
-
----
-
-#### Issue 3: AVX2 CPU Instructions Not Passing Through VM
-
-**Problem:** CARLA crashed with `Illegal instruction (core dumped)` even on Ubuntu 22.04. The command `grep avx2 /proc/cpuinfo` returned no output inside the VM, meaning AVX2 instructions were not visible despite the host CPU (i7-13700F) fully supporting them.
-
-**Root Cause:** Windows Virtualization Based Security (VBS) was running and intercepting the CPU virtualization layer before VirtualBox could access it. This prevented VirtualBox from passing advanced CPU instruction sets (AVX/AVX2) through to the VM.
-
-**Diagnosis Process:**
-
-```bash
-# On Windows - confirmed VBS was active
-systeminfo | findstr /i "virtualization"
-# Output: Virtualization-based Security: Status: Running
-```
-
-**Failed Attempts:**
-
-1. `bcdedit /set hypervisorlaunchtype off` — VBS persisted
-2. `bcdedit /set vsmlaunchtype off` — VBS persisted
-3. Registry edit `EnableVirtualizationBasedSecurity = 0` — VBS persisted
-4. BIOS check — Intel Virtualization Technology and AVX/AVX2 were already Enabled in BIOS
-
-**Root Cause (Deeper):** Norton 360 antivirus was re-enabling VBS through its Tamper Protection feature, overriding the bcdedit and registry changes on every boot.
-
-**Resolution:**
-
-1. Opened Windows Security → Device Security → Core Isolation Details
-2. Disabled **Memory Integrity**
-3. Full power cycle (not restart)
-4. Confirmed VBS disabled:
-
-```bash
-systeminfo | findstr /i "virtualization"
-# Output: Virtualization-based Security: Status: Not Enabled
-```
-
-5. Re-ran VBoxManage AVX2 commands:
-
-```bash
-VBoxManage setextradata "F1-Simulator-Dev" VBoxInternal/CPUM/IsaExts/AVX 1
-VBoxManage setextradata "F1-Simulator-Dev" VBoxInternal/CPUM/IsaExts/AVX2 1
-```
-
-6. Confirmed AVX2 visible in VM:
-
-```bash
-grep avx2 /proc/cpuinfo | head -1
-# Output: flags : ... avx2 ... (success)
-```
-
-**Lesson:** Security software like Norton actively fights VBS changes. Always check Memory Integrity under Core Isolation in Windows Security when VirtualBox can't access CPU features. The fix is in Windows Security, not the registry or bcdedit.
-
----
-
-#### Issue 4: CARLA Segmentation Fault on Launch
-
-**Problem:** After resolving AVX2, CARLA launched but crashed with:
-
-markdown`
-GameThread timed out waiting for RenderThread after 60.00 secs
-Segmentation fault (core dumped)`
-
-**Root Cause:** VirtualBox's virtual GPU cannot handle Unreal Engine 4's Vulkan rendering pipeline. Even with AVX2 resolved, the virtual display adapter lacks the graphics capability CARLA requires for rendering.
-
-**Current Status:** This is a fundamental VirtualBox limitation. CARLA requires direct GPU access for its rendering engine.
-
-**Resolution (In Progress):** Dual booting Ubuntu 22.04 natively on the host machine to give CARLA direct access to the dedicated GPU. This is the proper long-term solution.
-
----
-
-### Phase 2 — Dual Boot Setup _(In Progress)_
-
-**Goal:** Install Ubuntu 22.04 natively alongside Windows 11 to give CARLA full GPU access.
-
-**Plan:**
-
-- Back up Windows to external drive using Macrium Reflect
-- Shrink Windows partition by 80GB using Disk Management
-- Install Ubuntu 22.04 into freed space
-- Configure GRUB dual boot
-- Install CARLA with full GPU support
-- Verify CARLA launches with 3D environment
-
-**Status:** Pending external drive acquisition for backup.
-
----
-
-## Roadmap
-
-### ✅ Completed
-
-- Project repository created and structured
-- Ubuntu 22.04 VM configured with AVX2 support
-- VBS disabled, Guest Additions working
-- Clipboard bidirectional working
-- Dev environment: Git, VS Code, G++, CMake installed
-- GitHub repo connected
-
-### 🔄 In Progress
-
-- Dual boot Ubuntu setup on home PC
-- CARLA confirmed running natively
-
-### 📋 Upcoming
-
-- Write first C++ CARLA client
-- Implement vehicle physics model
-- Build telemetry logger
-- Add tire degradation model
-- Add aerodynamics model
-- Set up Tailscale remote access from laptop
-- Build results visualization
-
----
-
-## Lessons Learned
-
-1. **Check OS compatibility first** — Always verify the simulator's supported OS before installing anything. One version difference caused hours of debugging.
-
-2. **Security software fights you** — Norton 360's Tamper Protection actively re-enabled Windows VBS overriding manual registry and bcdedit changes. The fix was in Windows Security → Core Isolation, not the command line.
-
-3. **VirtualBox has real GPU limits** — For graphics-intensive applications like CARLA/Unreal Engine, VirtualBox's virtual GPU is not sufficient. Dual boot or WSL2 with GPU passthrough are the proper solutions.
-
-4. **Document everything** — Every error message, every failed command, every fix. This README exists because of that habit and it's already useful reference material.
-
-5. **Guest Additions installation method matters** — Installing from the VirtualBox CD image (`VBoxLinuxAdditions.run`) is more reliable than apt packages alone on Ubuntu 22.04.
-
----
-
-## References
-
-- [CARLA Documentation](https://carla.readthedocs.io)
-- [CARLA GitHub Releases](https://github.com/carla-simulator/carla/releases)
-- [ROS Documentation](https://docs.ros.org)
-- [VirtualBox Guest Additions Guide](https://www.virtualbox.org/manual/ch04.html)
-- [Ubuntu 22.04 LTS Download](https://releases.ubuntu.com/22.04/)
-
----
-
-## License
-
-MIT License — feel free to use, modify, and distribute.
-
----
-
-## Tools & Acknowledgements
-
-This project was built with assistance from **Claude (Anthropic)** as an AI pair programming and debugging partner. Claude was used throughout the development process for:
-
-- Architectural planning and project structure decisions
-- Debugging environment setup issues (VBS, AVX2, Guest Additions)
-- Researching CARLA compatibility requirements
-- Writing and reviewing C++ code
-- Documenting the development process
-
-All code, decisions, and implementations were reviewed, understood, and executed by the developer. Claude served as a technical sounding board — similar to how a senior engineer or mentor might assist a junior developer working through a complex setup.
-
-AI-assisted development is a core skill in modern software engineering. This project reflects the ability to effectively leverage AI tools while maintaining full ownership of the technical work.
-
----
+## Known gaps / not yet implemented
+
+- **`src/telemetry/`** — currently just empty placeholder files. CSV writing
+  still lives inline in `main.cpp`'s scenario functions rather than a reusable
+  logger class.
+- **`tests/test_vehicle.cpp`** — empty placeholder. No automated tests yet.
+- **`config/simulation_config.json`** — empty placeholder. Simulation
+  parameters are hardcoded in C++ rather than externalized.
+- **No real circuit geometry** — `Track::stadium()` is a synthetic test loop,
+  not a digitized real-world track.
+- **No engine power curve** — `maxDriveF` is a constant regardless of speed,
+  so top speed is currently bounded only by drag, not by realistic
+  power-limited engine force.
+- **`trackWidth`** is declared in `CarParams` but unused — there's no
+  per-wheel (four-corner) load model yet, only front/rear axle loads.
+- **No CARLA integration** — the project's original goal, not currently
+  pursued in favor of the standalone simulation above.
