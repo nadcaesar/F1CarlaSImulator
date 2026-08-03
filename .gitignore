@@ -1,1 +1,9 @@
-.vscode/settings.json
+build/
+venv/
+results/telemetry/*.csv
+results/logs/*.png
+*.exe
+.vscode/
+.cmake/
+*.ipynb_checkpoints/
+src/main
