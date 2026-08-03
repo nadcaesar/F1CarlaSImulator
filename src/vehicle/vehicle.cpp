@@ -44,11 +44,10 @@ void step(State &s, const CarParams &p, double throttle,
     double drag = p.dragCoeff * s.vx * s.vx;
     double FxDrive = throttle * p.maxDriveF;
     double FxBrake = brake * p.maxBrakeF;
-    double Fx = FxDrive - FxBrake - drag;
 
     // Longitudinal accel estimate for load transfer (uses previous-step
     // vx implicitly via Fx/mass — good enough at 1ms resolution).
-    double axEstimate = Fx / p.mass;
+    double axEstimate = (FxDrive - FxBrake - drag) / p.mass;
 
     auto [Fzf, Fzr] = axleLoads(s, p, axEstimate);
 
@@ -58,25 +57,34 @@ void step(State &s, const CarParams &p, double throttle,
     // demand across axles (front carries braking mostly via brake bias
     // in a real car; here we approximate 50/50 for brake, rear-only
     // for drive since this is a rough RWD-style split).
-    double FxFront = -FxBrake * 0.5;         // braking only, front share
-    double FxRear = FxDrive - FxBrake * 0.5; // drive + rear brake share
+    double FxFrontDemand = -FxBrake * 0.5;         // braking only, front share
+    double FxRearDemand = FxDrive - FxBrake * 0.5; // drive + rear brake share
 
     double FzfMax = p.muTire * Fzf;
     double FzrMax = p.muTire * Fzr;
 
-    // Remaining lateral capacity after longitudinal demand eats into
-    // the circle: sqrt(mu*Fz)^2 - Fx^2), clamped at zero.
-    auto lateralCapacity = [](double muFzMax, double fxDemand)
+    // Combined-slip friction circle: scale the (Fx, Fy) demand vector
+    // for each axle down together to fit within mu*Fz, preserving its
+    // direction — not grant Fx in full and leave whatever's left for
+    // Fy. The latter would let full throttle silently zero out an
+    // axle's cornering force even when the raw demand didn't need the
+    // whole circle, which made hard acceleration mid-corner (or right
+    // after one) an unrecoverable snap-oversteer every time.
+    auto frictionCircleScale = [](double fx, double fy, double muFzMax)
     {
-        double remaining = muFzMax * muFzMax - fxDemand * fxDemand;
-        return remaining > 0.0 ? std::sqrt(remaining) : 0.0;
+        double mag = std::sqrt(fx * fx + fy * fy);
+        return (mag > muFzMax && mag > 1e-9) ? muFzMax / mag : 1.0;
     };
 
-    double FyfMax = lateralCapacity(FzfMax, FxFront);
-    double FyrMax = lateralCapacity(FzrMax, FxRear);
+    double scaleF = frictionCircleScale(FxFrontDemand, FyfRaw, FzfMax);
+    double scaleR = frictionCircleScale(FxRearDemand, FyrRaw, FzrMax);
 
-    double Fyf = std::clamp(FyfRaw, -FyfMax, FyfMax);
-    double Fyr = std::clamp(FyrRaw, -FyrMax, FyrMax);
+    double FxFront = FxFrontDemand * scaleF;
+    double Fyf = FyfRaw * scaleF;
+    double FxRear = FxRearDemand * scaleR;
+    double Fyr = FyrRaw * scaleR;
+
+    double Fx = FxFront + FxRear - drag;
 
     double ax = (Fx - Fyf * std::sin(steer)) / p.mass + s.vy * s.r;
     double ay = (Fyf * std::cos(steer) + Fyr) / p.mass - s.vx * s.r;
