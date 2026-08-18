@@ -19,10 +19,9 @@ car-setup parameters the way Assetto Corsa Competizione or Forza Horizon's
 tuning screen does — camber, toe, ride height, spring rate, anti-roll bar
 stiffness, brake bias, gear ratios.
 
-**Why it's a real idea, not scope creep:** it's a natural extension of the
-physics already derived (axle load split, aero downforce, lateral load
-transfer, friction-circle grip) — same formulas, generalized so their inputs
-become user-adjustable instead of fixed constants.
+**Why it's a real idea, not scope creep:** the physics already exists (axle
+load split, aero downforce, lateral load transfer, friction-circle grip) —
+this just makes their inputs adjustable instead of hardcoded.
 
 **Why it's not next:** several of these parameters aren't represented in the
 current model at all and would require real new physics, not just UI:
