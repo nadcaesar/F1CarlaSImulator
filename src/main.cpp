@@ -19,7 +19,7 @@ void runScenario(const std::string &name, double steerDeg, const std::string &ou
     const int steps = static_cast<int>(simTime / dt);
 
     std::ofstream out(outPath);
-    out << "time,x,y,yaw,vx,vy,yaw_rate,lat_accel_g\n";
+    out << "time,x,y,yaw,vx,vy,yaw_rate,lat_accel_g,FL,FR,RL,RR\n";
 
     for (int i = 0; i < steps; ++i)
     {
@@ -29,13 +29,15 @@ void runScenario(const std::string &name, double steerDeg, const std::string &ou
         double brake = 0.0;
         double steer = (t > 3.0) ? (steerDeg * PI / 180.0) : 0.0;
 
-        step(s, p, throttle, brake, steer, dt);
+        WheelLoads wheels;
+        step(s, p, throttle, brake, steer, dt, &wheels);
 
         if (i % 10 == 0)
         {
             double latG = (s.vx * s.r) / 9.81;
             out << t << "," << s.x << "," << s.y << "," << s.yaw << ","
-                << s.vx << "," << s.vy << "," << s.r << "," << latG << "\n";
+                << s.vx << "," << s.vy << "," << s.r << "," << latG << ","
+                << wheels.FL << "," << wheels.FR << "," << wheels.RL << "," << wheels.RR << "\n";
         }
     }
 
@@ -93,7 +95,7 @@ void runCircuitScenario(const std::string &name, Track track, double simTime,
     const int steps = static_cast<int>(simTime / dt);
 
     std::ofstream out(outPath);
-    out << "time,x,y,yaw,vx,vy,yaw_rate,lat_accel_g\n";
+    out << "time,x,y,yaw,vx,vy,yaw_rate,lat_accel_g,FL,FR,RL,RR\n";
 
     std::size_t prevSearchIndex = 0;
     int lapCount = 0;
@@ -129,7 +131,8 @@ void runCircuitScenario(const std::string &name, Track track, double simTime,
         double brake = brakeRaw;
         prevThrottle = throttle;
 
-        step(s, p, throttle, brake, steer, dt);
+        WheelLoads wheels;
+        step(s, p, throttle, brake, steer, dt, &wheels);
 
         // A large backward jump in the nearest-point index means we
         // crossed the seam back to the start of the waypoint list.
@@ -145,7 +148,8 @@ void runCircuitScenario(const std::string &name, Track track, double simTime,
         {
             double latG = (s.vx * s.r) / 9.81;
             out << t << "," << s.x << "," << s.y << "," << s.yaw << ","
-                << s.vx << "," << s.vy << "," << s.r << "," << latG << "\n";
+                << s.vx << "," << s.vy << "," << s.r << "," << latG << ","
+                << wheels.FL << "," << wheels.FR << "," << wheels.RL << "," << wheels.RR << "\n";
         }
     }
 

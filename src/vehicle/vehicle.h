@@ -33,6 +33,20 @@ struct State
 // (longitudinal, from accel/brake) folded in via ax.
 std::pair<double, double> axleLoads(const State &s, const CarParams &p, double ax);
 
-// One integration step. Returns nothing; mutates s in place.
+struct WheelLoads
+{
+    double FL = 0.0, FR = 0.0, RL = 0.0, RR = 0.0;
+};
+
+// Splits front/rear axle loads (from axleLoads(), which already
+// includes longitudinal transfer) left/right using lateral load
+// transfer: cornering rolls weight onto the outside wheels and off the
+// inside ones.
+WheelLoads wheelLoads(double Fzf, double Fzr, double lateralAccel, const CarParams &p);
+
+// One integration step. Returns nothing; mutates s in place. If
+// outWheels is non-null, filled with this step's per-wheel loads,
+// computed from the same Fzf/Fzr/lateral-accel step() already works out
+// internally.
 void step(State &s, const CarParams &p, double throttle,
-          double brake, double steer, double dt);
+          double brake, double steer, double dt, WheelLoads *outWheels = nullptr);

@@ -30,8 +30,30 @@ std::pair<double, double> axleLoads(const State &s, const CarParams &p, double a
     return {Fzf, Fzr};
 }
 
+WheelLoads wheelLoads(double Fzf, double Fzr, double lateralAccel, const CarParams &p)
+{
+    // Lateral load transfer, applied identically to both axles on top
+    // of the longitudinal split axleLoads() already computed. This is a
+    // simplification -- a real car splits total lateral transfer between
+    // front/rear by roll-stiffness distribution, not evenly -- but it's
+    // consistent with the lumped, no-suspension-model level of detail
+    // everywhere else in this file (e.g. downforce split 50/50).
+    double transfer = (p.mass * lateralAccel * p.cgHeight) / p.trackWidth;
+
+    // Body frame: +y is left (see purePursuitSteer's local-frame
+    // convention), so positive lateralAccel (cornering left) transfers
+    // load onto the right (outside) wheels and off the left (inside)
+    // ones.
+    WheelLoads w;
+    w.FL = std::max(0.0, Fzf / 2.0 - transfer / 2.0);
+    w.FR = std::max(0.0, Fzf / 2.0 + transfer / 2.0);
+    w.RL = std::max(0.0, Fzr / 2.0 - transfer / 2.0);
+    w.RR = std::max(0.0, Fzr / 2.0 + transfer / 2.0);
+    return w;
+}
+
 void step(State &s, const CarParams &p, double throttle,
-          double brake, double steer, double dt)
+          double brake, double steer, double dt, WheelLoads *outWheels)
 {
 
     double alphaF = std::atan2(s.vy + p.a * s.r, s.vx) - steer;
@@ -89,6 +111,9 @@ void step(State &s, const CarParams &p, double throttle,
     double ax = (Fx - Fyf * std::sin(steer)) / p.mass + s.vy * s.r;
     double ay = (Fyf * std::cos(steer) + Fyr) / p.mass - s.vx * s.r;
     double rDot = (p.a * Fyf * std::cos(steer) - p.b * Fyr) / p.Iz;
+
+    if (outWheels)
+        *outWheels = wheelLoads(Fzf, Fzr, ay, p);
 
     s.vx += ax * dt;
     s.vy += ay * dt;
